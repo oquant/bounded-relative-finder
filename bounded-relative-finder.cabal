@@ -1,0 +1,56 @@
+cabal-version: 2.4
+name: bounded-relative-finder
+version: 0.1.0.0
+synopsis: An algorithm inspired by SymSpell for relative-finding, a problem related to nearest-neighbor finding.
+
+description: 
+homepage:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+license: BSD-3-Clause
+license-file: LICENSE
+author: Edmund Noble
+maintainer: edmundnoble@gmail.com
+
+copyright: OQuant 2020
+category: Data
+extra-source-files: CHANGELOG.md
+
+common depends
+  build-depends: 
+    base ^>= 4.14.1.0,
+    bytestring,
+    containers,
+    unordered-containers,
+    hashable,
+    mtl,
+    text,
+    vector
+  ghc-options: -Wno-partial-type-signatures
+  default-extensions: 
+    DeriveFoldable,
+    DeriveFunctor,
+    DeriveTraversable,
+    DeriveGeneric,
+    TupleSections,
+    FlexibleContexts,
+    RecursiveDo,
+    BangPatterns 
+  default-language: Haskell2010
+
+library
+    import: depends
+    exposed-modules: Data.BoundedRelativeFinder
+
+    hs-source-dirs: .
+
+test-suite bounded-relative-finder-test
+    import: depends
+    build-depends: 
+      bounded-relative-finder,
+      hedgehog
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: BoundedRelativeFinderTest.hs
+
