@@ -17,7 +17,7 @@ zeroDistance :: (Eq a, Ord a, Hashable a, Show a) => Gen a -> Shrink a -> Proper
 zeroDistance g d = property $ do
   xs <- forAll (Gen.list (Range.linear 0 100) g)
   let dict = buildShrinkDict d 0 (zip [0..] xs)
-  assert $ all (\x -> sort ((xs !!) . _entryReference . _resultEntry <$> concat (queryD d 0 dict x)) == sort (filter (== x) xs)) xs
+  assert $ all (\x -> sort ((xs !!) <$> concat (queryD d 0 dict x)) == sort (filter (== x) xs)) xs
 
 main :: IO ()
 main =

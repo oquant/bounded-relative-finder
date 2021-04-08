@@ -2,8 +2,6 @@
 
 module Data.BoundedRelativeFinder
   ( Shrink(..)
-  , ShrinkEntry(..)
-  , QueryResult(..)
   , emptyShrink
   , shrinkListEverywhere
   , shrinkListHead
@@ -85,14 +83,7 @@ shrinkByteString = Shrink $ \bstr -> [ deleteAt n bstr | n <- [0..ByteString.len
 
 -- |A dictionary: the keys are the hashes of shrink results.
 -- Hash collisions are possible, so the user has to double-check shrink distances after querying.
-newtype ShrinkDict a = ShrinkDict (IntMap [ShrinkEntry a])
-  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
-
--- |Some kind of reference to the original dictionary term, paired with the distance from it.
-data ShrinkEntry k = ShrinkEntry
-  { _entryReference :: !k
-  , _entryShrinkDistance :: !Int
-  }
+newtype ShrinkDict k = ShrinkDict (IntMap [k])
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 buildShrinkDict :: Hashable v => Shrink v -> Int -> [(k, v)] -> ShrinkDict k
@@ -103,7 +94,7 @@ buildShrinkDict ray shrinkDepth starts =
   go !acc _ [] = acc
   go !acc n xs = go nextAcc (n+1) deletions
     where
-    nextAcc = IntMap.unionWith (<>) acc (IntMap.fromListWith (<>) [(hash a, [ShrinkEntry i n]) | (a, i) <- xs])
+    nextAcc = IntMap.unionWith (<>) acc (IntMap.fromListWith (<>) [(hash a, [i]) | (a, i) <- xs])
     deletions = concatMap (\(a, i) -> (,i) <$> shrink ray a) xs
 
 -- |Helper for doing breadth-first traversal of query results.
@@ -115,17 +106,11 @@ traverseQueue' gen start = mdo ins <- go (length start) (start ++ ins)
                          ins' <- go (n - 1 + length ins) xs
                          pure (ins ++ ins')
 
-data QueryResult a = QueryResult
-  { _queryShrinkDistance :: !Int
-  , _resultEntry :: {-# unpack #-} !(ShrinkEntry a)
-  }
-  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
-
 -- |Streams the matching dictionary entries ordered by query depth.
 -- This is done by traversing the deletions of the query term breadth-first.
 -- In practice this means that the results are ordered by how much backtracking from the query term was required.
 -- The cost is a larger live set than queryD.
-queryB :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict k -> a -> [[QueryResult k]]
+queryB :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict k -> a -> [[k]]
 queryB ray shrinkDepth (ShrinkDict delDict) i = snd $ runWriter $ evalStateT (traverseQueue' gen [(i, 0)]) HashSet.empty
   where
   gen (x, n) = do
@@ -134,7 +119,7 @@ queryB ray shrinkDepth (ShrinkDict delDict) i = snd $ runWriter $ evalStateT (tr
     then pure []
     else do
       modify (HashSet.insert h)
-      tell [fmap (QueryResult n) entries]
+      tell [entries]
       pure $ guard (n + 1 <= shrinkDepth) *> newIns
       where
       h = hashed x
@@ -143,22 +128,21 @@ queryB ray shrinkDepth (ShrinkDict delDict) i = snd $ runWriter $ evalStateT (tr
 
 -- |Streams the matching dictionary entries traversing the deletions of the query term depth-first.
 -- smaller live set than `queryB`, but the results don't have much interesting order to them.
-queryD :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict k -> a -> [[QueryResult k]]
-queryD ray shrinkDepth (ShrinkDict delDict) i = runST $ do
-  r <- newSTRef HashSet.empty
-  go r 0 i
+queryD :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict k -> a -> [[k]]
+queryD ray shrinkDepth (ShrinkDict delDict) i =
+  evalState (go 0 i) HashSet.empty
   where
-  go r n x = do
-    seen <- readSTRef r
+  go n x = do
+    seen <- get
     if HashSet.member h seen
     then pure []
     else do
-      modifySTRef' r (HashSet.insert h)
+      modify' (HashSet.insert h)
       rest <-
         if n + 1 <= shrinkDepth
-        then unsafeDupableInterleaveST (concat <$> traverse (go r (n + 1)) (shrink ray x))
+        then concat <$> traverse (go (n + 1)) (shrink ray x)
         else pure []
-      pure $ fmap (QueryResult n) des : rest
+      pure $ des : rest
     where
     h = hashed x
     des = fromMaybe [] (IntMap.lookup (hash h) delDict)
