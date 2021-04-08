@@ -20,6 +20,7 @@ import Control.Monad.ST
 import Control.Monad.ST.Unsafe
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as ByteString
+import Data.Containers.ListUtils
 import Data.Hashable
 import Data.IntMap.Strict(IntMap)
 import qualified Data.IntMap.Strict as IntMap
@@ -86,7 +87,7 @@ shrinkByteString = Shrink $ \bstr -> [ deleteAt n bstr | n <- [0..ByteString.len
 newtype ShrinkDict k = ShrinkDict (IntMap [k])
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
-buildShrinkDict :: Hashable v => Shrink v -> Int -> [(k, v)] -> ShrinkDict k
+buildShrinkDict :: (Ord k, Hashable v) => Shrink v -> Int -> [(k, v)] -> ShrinkDict k
 buildShrinkDict ray shrinkDepth starts =
   ShrinkDict $ go mempty 0 (fmap swap starts)
   where
@@ -94,7 +95,7 @@ buildShrinkDict ray shrinkDepth starts =
   go !acc _ [] = acc
   go !acc n xs = go nextAcc (n+1) deletions
     where
-    nextAcc = IntMap.unionWith (<>) acc (IntMap.fromListWith (<>) [(hash a, [i]) | (a, i) <- xs])
+    nextAcc = IntMap.unionWith (\x y -> nubOrd (x <> y)) acc (IntMap.fromListWith (<>) [(hash a, [i]) | (a, i) <- xs])
     deletions = concatMap (\(a, i) -> (,i) <$> shrink ray a) xs
 
 -- |Helper for doing breadth-first traversal of query results.
