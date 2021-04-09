@@ -47,7 +47,9 @@ main =
         shrinkTriangular (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
     , ("shrinkListEverywhere on lists of strings is triangular",
         shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkListEverywhere (shrinkListEverywhere emptyShrink)))
-    , ("shrinkTree on trees of strings is triangular",
+    , ("shrinkListEverywhere (shrinkListHead) on lists of lists of shrinkable ints is triangular",
+        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10)))) (shrinkListEverywhere (shrinkListHead (shrinkStepTo 1 0))))
+    , ("shrinkTree (shrinkListEverywhere) on trees of strings is triangular",
         shrinkTriangular (genTree (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkTree (shrinkListEverywhere emptyShrink)))
     ])
 
