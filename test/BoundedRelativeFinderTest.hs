@@ -6,6 +6,7 @@ module Main (main) where
 import Control.Monad
 import Data.Hashable
 import Data.List
+import Data.Graph(Forest, Tree(..))
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -20,10 +21,16 @@ zeroDistance g d = property $ do
   let dict = buildShrinkDict d 0 (zip [0..] xs)
   assert $ all (\x -> sort ((xs !!) <$> concat (queryD d 0 dict x)) == sort (filter (== x) xs)) xs
 
+genTree :: Gen a -> Gen (Tree a)
+genTree g =
+  Gen.recursive Gen.choice
+    [ Node <$> g <*> pure [] ]
+    [ Node <$> g <*> Gen.list (Range.linear 1 3) (genTree g) ]
+
 shrinkTriangular :: (Show a, Eq a) => Gen a -> Shrink a -> Property
-shrinkTriangular g ray = property $ do
+shrinkTriangular g ray = withDiscards 500 $ property $ do
   elems <- shrink ray <$> forAll g
-  guard (not (null elems))
+  guard (length elems >= 2)
   assert $ and
     [not (null (shrink ray e1 `intersect` shrink ray e2)) | e1 <- elems, e2 <- elems, e1 /= e2]
 
@@ -40,6 +47,8 @@ main =
         shrinkTriangular (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
     , ("shrinkListEverywhere on lists of strings is triangular",
         shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkListEverywhere (shrinkListEverywhere emptyShrink)))
+    , ("shrinkTree on trees of strings is triangular",
+        shrinkTriangular (genTree (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkTree (shrinkListEverywhere emptyShrink)))
     ])
 
 

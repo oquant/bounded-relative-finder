@@ -8,6 +8,7 @@ module Data.BoundedRelativeFinder
   , shrinkListHead
   , shrinkText
   , shrinkByteString
+  , shrinkTree
   , buildShrinkDict
   , queryD
   , queryB
@@ -34,6 +35,8 @@ import Data.STRef
 import Data.Text(Text)
 import qualified Data.Text as Text
 import Data.Tuple
+import Data.Graph(Forest, Tree(..))
+import qualified Data.Graph as Graph
 import qualified Data.Vector.Unboxed as UV
 import GHC.Generics
 
@@ -88,6 +91,15 @@ shrinkByteString = Shrink $ \bstr -> [ deleteAt n bstr | n <- [0..ByteString.len
   where
   deleteAt n bstr =
     let (as, bs) = ByteString.splitAt n bstr in as <> ByteString.tail bs
+
+shrinkTree :: Shrink a -> Shrink (Tree a)
+shrinkTree ray = go
+  where
+  go = Shrink $ \t -> case t of
+    Node x f ->
+      (Node <$> shrink ray x <*> pure f) ++
+      (Node x <$> shrink shrinkForest f)
+  shrinkForest = shrinkListEverywhere go
 
 -- |A dictionary: the keys are the hashes of shrink results.
 -- Hash collisions are possible, so the user has to double-check shrink distances after querying.
