@@ -158,3 +158,6 @@ a lower semimodular poset and is compatible with a shrink operator is a
 potentially simpler approach to ensuring a shrink operator is triangular.
 `grow` operations are not provided by the accompanying library.
 
+A large class of semimodular posets arise in practice from
+[antimatroids](https://en.wikipedia.org/wiki/Antimatroid).
+
