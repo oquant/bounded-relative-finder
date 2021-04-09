@@ -55,6 +55,7 @@ newtype Shrink a =
 emptyShrink :: Shrink a
 emptyShrink = Shrink (const [])
 
+-- |Shrinking is moving by `step` toward `to`.
 shrinkStepTo :: (Num a, Ord a) => a -> a -> Shrink a
 shrinkStepTo step to = Shrink $ \n ->
   if n < to then [min to (n + step)]
@@ -65,7 +66,7 @@ orIfEmpty :: [a] -> [a] -> [a]
 orIfEmpty [] xs = xs
 orIfEmpty xs _ = xs
 
--- |Try to shrink one element or delete it if we can't.
+-- |Try to shrink each element or delete it if we can't. Triangular if the input is.
 shrinkListEverywhere :: Shrink a -> Shrink [a]
 shrinkListEverywhere ray = Shrink $ \xs ->
   concat [shrinkOrDeleteAt n xs | n <- [0..length xs - 1]]
@@ -74,6 +75,7 @@ shrinkListEverywhere ray = Shrink $ \xs ->
     [as ++ (p : bs) | p <- shrink ray b] `orIfEmpty` [as ++ bs]
     where (as, b:bs) = splitAt n xs
 
+-- |Try to shrink the head or delete it if we can't. Triangular if the input is.
 shrinkListHead :: Shrink a -> Shrink [a]
 shrinkListHead ray = Shrink go
   where
@@ -92,6 +94,7 @@ shrinkByteString = Shrink $ \bstr -> [ deleteAt n bstr | n <- [0..ByteString.len
   deleteAt n bstr =
     let (as, bs) = ByteString.splitAt n bstr in as <> ByteString.tail bs
 
+-- |Try to shrink each forest of children recursively or delete it if we can't; try to shrink each value if we can.
 shrinkTree :: Shrink a -> Shrink (Tree a)
 shrinkTree ray = go
   where

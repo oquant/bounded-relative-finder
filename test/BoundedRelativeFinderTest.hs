@@ -28,7 +28,7 @@ genTree g =
     [ Node <$> g <*> Gen.list (Range.linear 1 3) (genTree g) ]
 
 shrinkTriangular :: (Show a, Eq a) => Gen a -> Shrink a -> Property
-shrinkTriangular g ray = withDiscards 500 $ property $ do
+shrinkTriangular g ray = withTests 500 $ withDiscards 2000 $ property $ do
   elems <- shrink ray <$> forAll g
   guard (length elems >= 2)
   assert $ and
