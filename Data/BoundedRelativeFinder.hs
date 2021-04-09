@@ -3,6 +3,7 @@
 module Data.BoundedRelativeFinder
   ( Shrink(..)
   , emptyShrink
+  , shrinkStepTo
   , shrinkListEverywhere
   , shrinkListHead
   , shrinkText
@@ -50,6 +51,12 @@ newtype Shrink a =
 -- |Generates the trivial ordering.
 emptyShrink :: Shrink a
 emptyShrink = Shrink (const [])
+
+shrinkStepTo :: (Num a, Ord a) => a -> a -> Shrink a
+shrinkStepTo step to = Shrink $ \n ->
+  if n < to then [min to (n + step)]
+  else if n > to then [max to (n - step)]
+  else []
 
 orIfEmpty :: [a] -> [a] -> [a]
 orIfEmpty [] xs = xs
