@@ -150,14 +150,9 @@ example, repeatedly halving an integer, eagerly trying the smallest possible
 data before anything else, or progressing via binary search toward some
 particular value.
 
-The dual of a shrink operator is a grow operator `grow :: a -> [a]`. A `grow`
-operator generates a covering relation and poset in a similar way to `shrink`,
-backwards: `x <| y == elem y (grow x)`. A grow operator and shrink operator are
-*compatible* if they generate the same poset. Proving a grow operator generates
-a lower semimodular poset and is compatible with a shrink operator is a
-potentially simpler approach to ensuring a shrink operator is triangular.
-`grow` operations are not provided by the accompanying library.
-
-A large class of semimodular posets arise in practice from
-[antimatroids](https://en.wikipedia.org/wiki/Antimatroid).
+A large class of shrink operators arise in practice from different types of
+deletions. For example deletion from sets, deletion from multisets, deletion
+from sentences in a formal language, all of these yield triangular shrink
+operators. Regarding deletion from sets, look into accessible set systems,
+which include matroids and antimatroids.
 
