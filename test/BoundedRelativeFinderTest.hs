@@ -25,7 +25,7 @@ genTree :: Gen a -> Gen (Tree a)
 genTree g =
   Gen.recursive Gen.choice
     [ Node <$> g <*> pure [] ]
-    [ Node <$> g <*> Gen.list (Range.linear 1 3) (genTree g) ]
+    [ Node <$> g <*> Gen.list (Range.linear 0 4) (genTree g) ]
 
 shrinkTriangular :: (Show a, Eq a) => Gen a -> Shrink a -> Property
 shrinkTriangular g ray = withTests 500 $ withDiscards 2000 $ property $ do
