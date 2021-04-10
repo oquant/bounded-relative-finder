@@ -122,8 +122,9 @@ buildShrinkDict ray shrinkDepth starts =
     deletions = concatMap (\(a, i) -> (,i) <$> shrink ray a) xs
     uvMerge x y = UV.fromListN (UV.length x + UV.length y) (merge (UV.toList x) (UV.toList y))
     merge (x:xs) (y:ys)
-      | x <= y = x : merge xs (y:ys)
-      | x > y = y : merge (x:xs) ys
+      | x == y = x : merge xs ys
+      | x < y = x : merge xs (y:ys)
+      | y < x = y : merge (x:xs) ys
     merge xs [] = xs
     merge [] ys = ys
 
