@@ -22,6 +22,7 @@ common depends
     base ^>= 4.14.1.0,
     bytestring,
     containers,
+    deepseq,
     unordered-containers,
     hashable,
     mtl,
@@ -42,6 +43,7 @@ common depends
 library
     import: depends
     exposed-modules: Data.BoundedRelativeFinder
+    other-modules: Data.BoundedRelativeFinder.Internal.IntMap
 
     hs-source-dirs: .
 

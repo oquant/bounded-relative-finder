@@ -24,10 +24,6 @@ import Data.ByteString(ByteString)
 import qualified Data.ByteString as ByteString
 import Data.Containers.ListUtils
 import Data.Hashable
-import Data.IntMap.Strict(IntMap)
-import qualified Data.IntMap.Strict as IntMap
-import Data.IntSet(IntSet)
-import qualified Data.IntSet as IntSet
 import Data.HashSet(HashSet)
 import qualified Data.HashSet as HashSet
 import Data.Maybe
@@ -39,6 +35,9 @@ import Data.Graph(Forest, Tree(..))
 import qualified Data.Graph as Graph
 import qualified Data.Vector.Unboxed as UV
 import GHC.Generics
+
+import Data.BoundedRelativeFinder.Internal.IntMap(IntMap)
+import qualified Data.BoundedRelativeFinder.Internal.IntMap as IntMap
 
 -- |A `Shrink a` is a way to find all of the elements that an `a` value covers.
 -- For `ray :: Shrink a` to be well-behaved (see the README):
@@ -106,19 +105,27 @@ shrinkTree ray = go
 
 -- |A dictionary: the keys are the hashes of shrink results.
 -- Hash collisions are possible, so the user has to double-check shrink distances after querying.
-newtype ShrinkDict k = ShrinkDict (IntMap [k])
-  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+newtype ShrinkDict = ShrinkDict IntMap
+  deriving (Show, Eq, Generic)
 
-buildShrinkDict :: (Ord k, Hashable v) => Shrink v -> Int -> [(k, v)] -> ShrinkDict k
+buildShrinkDict :: Hashable v => Shrink v -> Int -> [v] -> ShrinkDict
 buildShrinkDict ray shrinkDepth starts =
-  ShrinkDict $ go mempty 0 (fmap swap starts)
+  ShrinkDict $ go mempty 0 (zip starts [0..])
   where
   go !acc n _ | n > shrinkDepth = acc
   go !acc _ [] = acc
   go !acc n xs = go nextAcc (n+1) deletions
     where
-    nextAcc = IntMap.unionWith (\x y -> nubOrd (x <> y)) acc (IntMap.fromListWith (<>) [(hash a, [i]) | (a, i) <- xs])
+    nextAcc =
+      IntMap.unionWith uvMerge acc $
+        (IntMap.fromListWith uvMerge [(hash a, UV.singleton i) | (a, i) <- xs])
     deletions = concatMap (\(a, i) -> (,i) <$> shrink ray a) xs
+    uvMerge x y = UV.fromListN (UV.length x + UV.length y) (merge (UV.toList x) (UV.toList y))
+    merge (x:xs) (y:ys)
+      | x <= y = x : merge xs (y:ys)
+      | x > y = y : merge (x:xs) ys
+    merge xs [] = xs
+    merge [] ys = ys
 
 -- |Helper for doing breadth-first traversal of query results.
 traverseQueue' :: MonadFix m => (a -> m [a]) -> [a] -> m [a]
@@ -133,7 +140,7 @@ traverseQueue' gen start = mdo ins <- go (length start) (start ++ ins)
 -- This is done by traversing the deletions of the query term breadth-first.
 -- In practice this means that the results are ordered by how much backtracking from the query term was required.
 -- The cost is a larger live set than queryD.
-queryB :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict k -> a -> [[k]]
+queryB :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict -> a -> [UV.Vector Int]
 queryB ray shrinkDepth (ShrinkDict delDict) i = snd $ runWriter $ evalStateT (traverseQueue' gen [(i, 0)]) HashSet.empty
   where
   gen (x, n) = do
@@ -146,12 +153,12 @@ queryB ray shrinkDepth (ShrinkDict delDict) i = snd $ runWriter $ evalStateT (tr
       pure $ guard (n + 1 <= shrinkDepth) *> newIns
       where
       h = hashed x
-      entries = fromMaybe [] (IntMap.lookup (hash h) delDict)
+      entries = fromMaybe UV.empty (IntMap.lookup (hash h) delDict)
       newIns = fmap (,n + 1) (shrink ray x)
 
 -- |Streams the matching dictionary entries traversing the deletions of the query term depth-first.
 -- smaller live set than `queryB`, but the results don't have much interesting order to them.
-queryD :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict k -> a -> [[k]]
+queryD :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict -> a -> [UV.Vector Int]
 queryD ray shrinkDepth (ShrinkDict delDict) i =
   evalState (go 0 i) HashSet.empty
   where
@@ -168,5 +175,5 @@ queryD ray shrinkDepth (ShrinkDict delDict) i =
       pure $ des : rest
     where
     h = hashed x
-    des = fromMaybe [] (IntMap.lookup (hash h) delDict)
+    des = fromMaybe UV.empty (IntMap.lookup (hash h) delDict)
 
