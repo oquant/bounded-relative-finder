@@ -10,6 +10,7 @@ module Data.BoundedRelativeFinder
   , shrinkByteString
   , shrinkTree
   , buildShrinkDict
+  , ShrinkAt(..)
   , queryD
   , queryB
   ) where
@@ -38,6 +39,8 @@ import GHC.Generics
 
 import Data.BoundedRelativeFinder.Internal.IntMap(IntMap)
 import qualified Data.BoundedRelativeFinder.Internal.IntMap as IntMap
+
+import Debug.Trace
 
 -- |A `Shrink a` is a way to find all of the elements that an `a` value covers.
 -- For `ray :: Shrink a` to be well-behaved (see the README):
@@ -134,7 +137,7 @@ buildShrinkDict ray shrinkDepth starts =
 -- |Helper for doing breadth-first traversal of query results.
 traverseQueue' :: MonadFix m => (a -> m [a]) -> [a] -> m [a]
 traverseQueue' gen start = mdo ins <- go (length start) (start ++ ins)
-                               pure ins
+                               pure (start ++ ins)
   where go 0 _ = pure []
         go n (x:xs) = do ins <- gen x
                          ins' <- go (n - 1 + length ins) xs
@@ -143,59 +146,54 @@ traverseQueue' gen start = mdo ins <- go (length start) (start ++ ins)
 allShrinksTo :: Shrink a -> Int -> a -> [a]
 allShrinksTo ray depth a = a : concatMap (allShrinksTo ray (depth - 1)) (shrink ray a)
 
-uniqueShrinksBreadth ray depth a = evalState (traverseQueue' gen [(hashed a, 0)]) HashSet.empty
+data ShrinkAt a = ShrinkAt !(Hashed a) !Int
+shrinkHash (ShrinkAt h _) = hash h
+
+uniqueShrinksBreadth :: (Hashable a, Ord a) => Shrink a -> Int -> a -> [ShrinkAt a]
+uniqueShrinksBreadth ray depth a =
+  -- we could start with `HashSet.singleton (hashed a)`, but we're guaranteed
+  -- not to ever find `a` as a result of shrinking `a`
+  evalState (traverseQueue' gen [ShrinkAt (hashed a) 0]) HashSet.empty
   where
-  gen (h, n) = do
+  gen (ShrinkAt h n) = do
     seen <- get
-    if n + 1 <= depth || HashSet.member h seen
+    if n == depth
     then pure []
     else do
-      modify' (HashSet.insert h)
-      pure $ (,n + 1) . hashed <$> shrink ray (unhashed h)
+      let shrinks = hashed <$> shrink ray (unhashed h)
+      let filteredShrinks = nubOrd $ filter (not . flip HashSet.member seen) shrinks
+      modify' (HashSet.union (HashSet.fromList filteredShrinks))
+      pure $ (flip ShrinkAt (n + 1)) <$> filteredShrinks
 
-uniqueShrinksDepth _ 0 a = [a]
-uniqueShrinksDepth ray depth a = a : concatMap (uniqueShrinksDepth ray (depth - 1)) (shrink ray a)
+uniqueShrinksDepth :: (Hashable a, Eq a) => Shrink a -> Int -> a -> [ShrinkAt a]
+uniqueShrinksDepth ray depth x = evalState (go 0 (hashed x)) HashSet.empty
+  where
+  go n h = do
+    seen <- get
+    let announceNewShrink = modify (HashSet.insert h)
+    if HashSet.member h seen then pure []
+    else if n == depth then announceNewShrink *> pure [ShrinkAt h n]
+    else do
+      let shrinks = hashed <$> shrink ray (unhashed h)
+      announceNewShrink
+      (ShrinkAt h n:) . concat <$> traverse (go (n+1)) shrinks
+
+queryDict dict s =
+  fromMaybe UV.empty (IntMap.lookup (shrinkHash s) (shrinkDict dict))
 
 -- |Streams the matching dictionary entries ordered by query depth.
 -- This is done by traversing the deletions of the query term breadth-first.
 -- In practice this means that the results are ordered by how much backtracking from the query term was required.
 -- The cost is a larger live set than queryD.
-queryB :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict -> a -> [(Hashed a, Int, UV.Vector Int)]
+queryB :: (Ord a, Hashable a) => Shrink a -> Int -> ShrinkDict -> a -> [(ShrinkAt a, UV.Vector Int)]
 queryB ray shrinkDepth dict i =
-  [ (h, hd, fromMaybe UV.empty (IntMap.lookup (hash h) (shrinkDict dict)))
-  | (h, hd) <- uniqueShrinksBreadth ray shrinkDepth i ]
-  where
-  gen (x, n) = do
-    seen <- get
-    if HashSet.member h seen
-    then pure []
-    else do
-      modify (HashSet.insert h)
-      tell [(x, entries)]
-      pure $ guard (n + 1 <= shrinkDepth) *> newIns
-      where
-      h = hashed x
-      entries = fromMaybe UV.empty (IntMap.lookup (hash h) (shrinkDict dict))
-      newIns = fmap (,n + 1) (shrink ray x)
+  [ (s, queryDict dict s)
+  | !s <- uniqueShrinksBreadth ray shrinkDepth i ]
 
 -- |Streams the matching dictionary entries traversing the deletions of the query term depth-first.
 -- smaller live set than `queryB`, but the results don't have much interesting order to them.
-queryD :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict -> a -> [(a, UV.Vector Int)]
+queryD :: (Eq a, Hashable a) => Shrink a -> Int -> ShrinkDict -> a -> [(ShrinkAt a, UV.Vector Int)]
 queryD ray shrinkDepth dict i =
-  evalState (go 0 i) HashSet.empty
-  where
-  go n x = do
-    seen <- get
-    if HashSet.member h seen
-    then pure []
-    else do
-      modify' (HashSet.insert h)
-      rest <-
-        if n + 1 <= shrinkDepth
-        then concat <$> traverse (go (n + 1)) (shrink ray x)
-        else pure []
-      pure $ (x, des) : rest
-    where
-    h = hashed x
-    des = fromMaybe UV.empty (IntMap.lookup (hash h) (shrinkDict dict))
+  [ (s, queryDict dict s)
+  | !s <- uniqueShrinksDepth ray shrinkDepth i ]
 
