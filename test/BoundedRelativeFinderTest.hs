@@ -6,6 +6,7 @@ module Main (main) where
 import Control.Monad
 import Data.Hashable
 import Data.List
+import Data.Maybe
 import Data.Graph(Forest, Tree(..))
 import qualified Data.Vector.Unboxed as UV
 import Hedgehog
@@ -16,11 +17,17 @@ import Debug.Trace
 import Data.BoundedRelativeFinder
 
 --
-zeroDistance :: (Eq a, Ord a, Hashable a, Show a) => Gen a -> Shrink a -> Property
-zeroDistance g d = property $ do
+zeroDistanceD :: (Eq a, Ord a, Hashable a, Show a) => Gen a -> Shrink a -> Property
+zeroDistanceD g ray = property $ do
   xs <- forAll (Gen.list (Range.linear 0 100) g)
-  let dict = buildShrinkDict d 0 xs
-  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryD d 0 dict x)) == sort (filter (== x) xs)) xs
+  let dict = buildShrinkDict ray 0 xs
+  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryD ray 0 dict x)) == sort (filter (== x) xs)) xs
+
+zeroDistanceB :: (Eq a, Ord a, Hashable a, Show a) => Gen a -> Shrink a -> Property
+zeroDistanceB g ray = property $ do
+  xs <- forAll (Gen.list (Range.linear 0 100) g)
+  let dict = buildShrinkDict ray 0 xs
+  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryB ray 0 dict x)) == sort (filter (== x) xs)) xs
 
 genTree :: Gen a -> Gen (Tree a)
 genTree g =
@@ -40,11 +47,38 @@ queryBOrdering ray d dict q = property $ do
   assert (xs == sortOn snd xs)
   assert (length xs > 1)
 
+validate ray depth (ShrinkAt h qd) result =
+  case find (\(ShrinkAt dh _) -> dh == h) (uniqueShrinksBreadth ray depth result) of
+    Just (ShrinkAt _ dd) -> Just (qd, dd)
+    _ -> Nothing
+
+queryDValid ray depth g = property $ do
+  xs <- forAll (Gen.list (Range.linear 0 100) g)
+  x <- forAll g
+  let dict = buildShrinkDict ray depth xs
+  let qrs = queryD ray depth dict x
+  assert $ not $ null qrs
+  assert $ all (\(s, rs) -> UV.all (\r -> uncurry max (fromMaybe maxBound $ validate ray depth s (xs !! r)) <= depth) rs) qrs
+
+queryBValid ray depth g = property $ do
+  xs <- forAll (Gen.list (Range.linear 0 100) g)
+  x <- forAll g
+  let dict = buildShrinkDict ray depth xs
+  let qrs = queryB ray depth dict x
+  assert $ not $ null qrs
+  assert $ all (\(s, rs) -> UV.all (\r -> uncurry max (fromMaybe maxBound $ validate ray depth s (xs !! r)) <= depth) rs) qrs
+
 main :: IO ()
 main = do
   checkParallel $ Group "bounded-relative-finder"
-    [ ("values with zero distance are equal",
-        zeroDistance (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
+    [ ("results returned by queryB at zero distance are equal",
+        zeroDistanceB (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
+    , ("results returned by queryD at zero distance are equal",
+        zeroDistanceD (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
+    , ("results returned by queryB are all valid",
+        queryBValid (shrinkListEverywhere emptyShrink) 2 (Gen.string (Range.linear 0 4) Gen.alpha))
+    , ("results returned by queryD are all valid",
+        queryDValid (shrinkListEverywhere emptyShrink) 2 (Gen.string (Range.linear 0 4) Gen.alpha))
     , ("shrinkListEverywhere on atomic ints is triangular",
         shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10))) (shrinkListEverywhere emptyShrink))
     , ("shrinkListEverywhere on shrinkable ints is triangular",

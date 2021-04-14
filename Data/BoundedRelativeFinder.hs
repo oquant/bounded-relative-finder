@@ -11,6 +11,8 @@ module Data.BoundedRelativeFinder
   , shrinkTree
   , buildShrinkDict
   , ShrinkAt(..)
+  , uniqueShrinksBreadth
+  , uniqueShrinksDepth
   , queryD
   , queryB
   ) where
@@ -24,6 +26,7 @@ import Control.Monad.ST.Unsafe
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as ByteString
 import Data.Containers.ListUtils
+import Data.Foldable
 import Data.Hashable
 import Data.HashSet(HashSet)
 import qualified Data.HashSet as HashSet
