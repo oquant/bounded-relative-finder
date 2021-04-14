@@ -1,9 +1,9 @@
 cabal-version: 2.4
 name: bounded-relative-finder
 version: 0.1.0.0
-synopsis: An algorithm inspired by SymSpell for relative-finding, a problem related to nearest-neighbor finding.
+synopsis: A bounded relative finder algorithm inspired by SymSpell.
 
-description: 
+description: An algorithm inspired by SymSpell for relative-finding, a problem related to nearest-neighbor finding.
 homepage:
 
 -- A URL where users can report bugs.
@@ -16,6 +16,11 @@ maintainer: edmundnoble@gmail.com
 copyright: OQuant 2020
 category: Data
 extra-source-files: CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/OQuant/bounded-relative-finder
+  branch: main
 
 common depends
   build-depends: 
