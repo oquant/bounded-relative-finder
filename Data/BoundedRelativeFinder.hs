@@ -5,6 +5,7 @@ module Data.BoundedRelativeFinder
   , emptyShrink
   , shrinkStepTo
   , shrinkListEverywhere
+  , shrinkListEverywhere'
   , shrinkListHead
   , shrinkText
   , shrinkByteString
@@ -78,6 +79,15 @@ shrinkListEverywhere ray = Shrink $ \xs ->
   where
   shrinkOrDeleteAt n xs =
     [as ++ (p : bs) | p <- shrink ray b] `orIfEmpty` [as ++ bs]
+    where (as, b:bs) = splitAt n xs
+
+-- |Try to shrink each element. Triangular if the input is.
+shrinkListEverywhere' :: Shrink a -> Shrink [a]
+shrinkListEverywhere' ray = Shrink $ \xs ->
+  concat [shrinkAt n xs | n <- [0..length xs - 1]]
+  where
+  shrinkAt n xs =
+    [as ++ (p : bs) | p <- shrink ray b]
     where (as, b:bs) = splitAt n xs
 
 -- |Try to shrink the head or delete it if we can't. Triangular if the input is.
