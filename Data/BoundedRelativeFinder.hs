@@ -4,8 +4,12 @@ module Data.BoundedRelativeFinder
   ( Shrink(..)
   , emptyShrink
   , shrinkStepTo
-  , shrinkListEverywhere
-  , shrinkListHead
+  , shrinkAt
+  , shrinkOrDeleteAt
+  , shrinkAll
+  , shrinkOrDeleteAll
+  , shrinkHead
+  , shrinkOrDeleteHead
   , shrinkText
   , shrinkByteString
   , shrinkTree
@@ -71,30 +75,45 @@ orIfEmpty :: [a] -> [a] -> [a]
 orIfEmpty [] xs = xs
 orIfEmpty xs _ = xs
 
+-- |Triangular if the input is.
+shrinkAt :: Shrink a -> Int -> Shrink [a]
+shrinkAt ray n = Shrink $ \xs ->
+  case splitAt n xs of
+    (_, []) -> error "shrinkListAt: can't shrink at positions off the end of the list"
+    (as, b:bs) -> [as ++ (p : bs) | p <- shrink ray b]
+
+-- |Triangular if the input is.
+shrinkOrDeleteAt :: Shrink a -> Int -> Shrink [a]
+shrinkOrDeleteAt ray n = Shrink $ \xs ->
+  case splitAt n xs of
+    (_, []) -> error "shrinkOrDeleteAt: can't shrink at positions off the end of the list"
+    (as, b:bs) -> [as ++ (p : bs) | p <- shrink ray b] `orIfEmpty` [as ++ bs]
+
 -- |Try to shrink each element or delete it if we can't. Triangular if the input is.
-shrinkListEverywhere :: Shrink a -> Shrink [a]
-shrinkListEverywhere ray = Shrink $ \xs ->
-  concat [shrinkOrDeleteAt n xs | n <- [0..length xs - 1]]
-  where
-  shrinkOrDeleteAt n xs =
-    [as ++ (p : bs) | p <- shrink ray b] `orIfEmpty` [as ++ bs]
-    where (as, b:bs) = splitAt n xs
+shrinkOrDeleteAll :: Shrink a -> Shrink [a]
+shrinkOrDeleteAll ray = Shrink $ \xs ->
+  concat [shrink (shrinkOrDeleteAt ray n) xs | n <- [0..length xs - 1]]
+
+-- |Try to shrink each element. Triangular if the input is.
+shrinkAll :: Shrink a -> Shrink [a]
+shrinkAll ray = Shrink $ \xs ->
+  concat [shrink (shrinkAt ray n) xs | n <- [0..length xs - 1]]
 
 -- |Try to shrink the head or delete it if we can't. Triangular if the input is.
-shrinkListHead :: Shrink a -> Shrink [a]
-shrinkListHead ray = Shrink go
-  where
-  go [] = []
-  go (x:xs) = ((:xs) <$> shrink ray x) `orIfEmpty` [xs]
+shrinkHead :: Shrink a -> Shrink [a]
+shrinkHead ray = shrinkAt ray 0
+
+shrinkOrDeleteHead :: Shrink a -> Shrink [a]
+shrinkOrDeleteHead ray = shrinkOrDeleteAt ray 0
 
 shrinkText :: Shrink Text
-shrinkText = Shrink $ \str -> [ deleteAt n str | n <- [0..Text.length str - 1] ]
+shrinkText = Shrink $ \str -> [deleteAt n str | n <- [0..Text.length str - 1]]
   where
   deleteAt n str =
     let (as, bs) = Text.splitAt n str in as <> Text.tail bs
 
 shrinkByteString :: Shrink ByteString
-shrinkByteString = Shrink $ \bstr -> [ deleteAt n bstr | n <- [0..ByteString.length bstr - 1] ]
+shrinkByteString = Shrink $ \bstr -> [deleteAt n bstr | n <- [0..ByteString.length bstr - 1]]
   where
   deleteAt n bstr =
     let (as, bs) = ByteString.splitAt n bstr in as <> ByteString.tail bs
@@ -107,7 +126,7 @@ shrinkTree ray = go
     Node x f ->
       (Node <$> shrink ray x <*> pure f) ++
       (Node x <$> shrink shrinkForest f)
-  shrinkForest = shrinkListEverywhere go
+  shrinkForest = shrinkAll go
 
 -- |A dictionary: the keys are the hashes of shrink results.
 -- Hash collisions are possible, so the user has to double-check shrink distances after querying.
@@ -127,7 +146,7 @@ buildShrinkDict ray shrinkDepth starts =
     where
     nextAcc =
       IntMap.unionWith uvMerge acc $
-        (IntMap.fromListWith uvMerge [(hash a, UV.singleton i) | (a, i) <- xs])
+        IntMap.fromListWith uvMerge [(hash a, UV.singleton i) | (a, i) <- xs]
     deletions = concatMap (\(a, i) -> (,i) <$> shrink ray a) xs
     uvMerge x y = UV.fromListN (UV.length x + UV.length y) (merge (UV.toList x) (UV.toList y))
     merge (x:xs) (y:ys)

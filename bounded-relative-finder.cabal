@@ -6,8 +6,6 @@ synopsis: A bounded relative finder algorithm inspired by SymSpell.
 description: An algorithm inspired by SymSpell for relative-finding, a problem related to nearest-neighbor finding.
 homepage:
 
--- A URL where users can report bugs.
--- bug-reports:
 license: BSD-3-Clause
 license-file: LICENSE
 author: Edmund Noble
@@ -25,14 +23,14 @@ source-repository head
 common depends
   build-depends: 
     base ^>= 4.14.1.0,
-    bytestring,
-    containers,
-    deepseq,
-    unordered-containers,
-    hashable,
-    mtl,
-    text,
-    vector
+    bytestring ^>= 0.10 || ^>= 0.11,
+    containers ^>= 0.6,
+    deepseq ^>= 1.4,
+    unordered-containers ^>= 0.2,
+    hashable ^>= 1.3,
+    mtl ^>= 2.2,
+    text ^>= 1.2,
+    vector ^>= 0.12
   ghc-options: -Wno-partial-type-signatures
   default-extensions: 
     DeriveFoldable,
@@ -49,14 +47,13 @@ library
     import: depends
     exposed-modules: Data.BoundedRelativeFinder
     other-modules: Data.BoundedRelativeFinder.Internal.IntMap
-
     hs-source-dirs: .
 
 test-suite bounded-relative-finder-test
     import: depends
     build-depends: 
       bounded-relative-finder,
-      hedgehog
+      hedgehog ^>= 1.0.5
     type: exitcode-stdio-1.0
     hs-source-dirs: test
     main-is: BoundedRelativeFinderTest.hs
