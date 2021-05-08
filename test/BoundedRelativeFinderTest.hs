@@ -20,14 +20,14 @@ import Data.BoundedRelativeFinder
 zeroDistanceD :: (Eq a, Ord a, Hashable a, Show a) => Gen a -> Shrink a -> Property
 zeroDistanceD g ray = property $ do
   xs <- forAll (Gen.list (Range.linear 0 100) g)
-  let dict = buildShrinkDict ray 0 xs
-  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryD ray 0 dict x)) == sort (filter (== x) xs)) xs
+  let dict = buildShrinkDict hash ray 0 xs
+  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryD hash ray 0 dict x)) == sort (filter (== x) xs)) xs
 
 zeroDistanceB :: (Eq a, Ord a, Hashable a, Show a) => Gen a -> Shrink a -> Property
 zeroDistanceB g ray = property $ do
   xs <- forAll (Gen.list (Range.linear 0 100) g)
-  let dict = buildShrinkDict ray 0 xs
-  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryB ray 0 dict x)) == sort (filter (== x) xs)) xs
+  let dict = buildShrinkDict hash ray 0 xs
+  assert $ all (\x -> sort ((xs !!) <$> concatMap (UV.toList . snd) (queryB hash ray 0 dict x)) == sort (filter (== x) xs)) xs
 
 genTree :: Gen a -> Gen (Tree a)
 genTree g =
@@ -43,28 +43,28 @@ shrinkTriangular g ray = withTests 500 $ withDiscards 2000 $ property $ do
     [not (null (shrink ray e1 `intersect` shrink ray e2)) | e1 <- elems, e2 <- elems, e1 /= e2]
 
 queryBOrdering ray d dict q = property $ do
-  let xs = [(h, d) | (ShrinkAt h d, _) <- queryB ray d (buildShrinkDict ray d dict) q]
+  let xs = [(h, d) | (ShrinkAt d a h, _) <- queryB hash ray d (buildShrinkDict hash ray d dict) q]
   assert (xs == sortOn snd xs)
   assert (length xs > 1)
 
-validate ray depth (ShrinkAt h qd) result =
-  case find (\(ShrinkAt dh _) -> dh == h) (uniqueShrinksBreadth ray depth result) of
-    Just (ShrinkAt _ dd) -> Just (qd, dd)
+validate ray depth (ShrinkAt qd _ h) result =
+  case find (\(ShrinkAt _ _ dh) -> dh == h) (uniqueShrinksBreadth hash ray depth result) of
+    Just (ShrinkAt dd _ _) -> Just (qd, dd)
     _ -> Nothing
 
 queryDValid ray depth g = property $ do
   xs <- forAll (Gen.list (Range.linear 0 100) g)
   x <- forAll g
-  let dict = buildShrinkDict ray depth xs
-  let qrs = queryD ray depth dict x
+  let dict = buildShrinkDict hash ray depth xs
+  let qrs = queryD hash ray depth dict x
   assert $ not $ null qrs
   assert $ all (\(s, rs) -> UV.all (\r -> uncurry max (fromMaybe maxBound $ validate ray depth s (xs !! r)) <= depth) rs) qrs
 
 queryBValid ray depth g = property $ do
   xs <- forAll (Gen.list (Range.linear 0 100) g)
   x <- forAll g
-  let dict = buildShrinkDict ray depth xs
-  let qrs = queryB ray depth dict x
+  let dict = buildShrinkDict hash ray depth xs
+  let qrs = queryB hash ray depth dict x
   assert $ not $ null qrs
   assert $ all (\(s, rs) -> UV.all (\r -> uncurry max (fromMaybe maxBound $ validate ray depth s (xs !! r)) <= depth) rs) qrs
 
@@ -72,27 +72,27 @@ main :: IO ()
 main = do
   checkParallel $ Group "bounded-relative-finder"
     [ ("results returned by queryB at zero distance are equal",
-        zeroDistanceB (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
+        zeroDistanceB (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkAll emptyShrink))
     , ("results returned by queryD at zero distance are equal",
-        zeroDistanceD (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
+        zeroDistanceD (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkAll emptyShrink))
     , ("results returned by queryB are all valid",
-        queryBValid (shrinkListEverywhere emptyShrink) 2 (Gen.string (Range.linear 0 4) Gen.alpha))
+        queryBValid (shrinkAll emptyShrink) 2 (Gen.string (Range.linear 0 4) Gen.alpha))
     , ("results returned by queryD are all valid",
-        queryDValid (shrinkListEverywhere emptyShrink) 2 (Gen.string (Range.linear 0 4) Gen.alpha))
-    , ("shrinkListEverywhere on atomic ints is triangular",
-        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10))) (shrinkListEverywhere emptyShrink))
-    , ("shrinkListEverywhere on shrinkable ints is triangular",
-        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10))) (shrinkListEverywhere (shrinkStepTo 1 0)))
-    , ("shrinkListEverywhere on strings is triangular",
-        shrinkTriangular (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkListEverywhere emptyShrink))
-    , ("shrinkListEverywhere on lists of strings is triangular",
-        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkListEverywhere (shrinkListEverywhere emptyShrink)))
-    , ("shrinkListEverywhere (shrinkListHead) on lists of lists of shrinkable ints is triangular",
-        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10)))) (shrinkListEverywhere (shrinkListHead (shrinkStepTo 1 0))))
-    , ("shrinkTree (shrinkListEverywhere) on trees of strings is triangular",
-        shrinkTriangular (genTree (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkTree (shrinkListEverywhere emptyShrink)))
+        queryDValid (shrinkAll emptyShrink) 2 (Gen.string (Range.linear 0 4) Gen.alpha))
+    , ("shrinkOrDeleteAll on atomic ints is triangular",
+        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10))) (shrinkOrDeleteAll emptyShrink))
+    , ("shrinkOrDeleteAll on shrinkable ints is triangular",
+        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10))) (shrinkOrDeleteAll (shrinkStepTo 1 0)))
+    , ("shrinkOrDeleteAll on strings is triangular",
+        shrinkTriangular (Gen.string (Range.linear 0 4) Gen.alpha) (shrinkOrDeleteAll emptyShrink))
+    , ("shrinkOrDeleteAll on lists of strings is triangular",
+        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkOrDeleteAll (shrinkOrDeleteAll emptyShrink)))
+    , ("shrinkOrDeleteAll (shrinkHead) on lists of lists of shrinkable ints is triangular",
+        shrinkTriangular (Gen.list (Range.linear 0 4) (Gen.list (Range.linear 0 4) (Gen.int (Range.linear (-10) 10)))) (shrinkOrDeleteAll (shrinkHead (shrinkStepTo 1 0))))
+    , ("shrinkTree (shrinkOrDeleteAll) on trees of strings is triangular",
+        shrinkTriangular (genTree (Gen.string (Range.linear 0 4) Gen.alpha)) (shrinkTree (shrinkOrDeleteAll emptyShrink)))
     , ("queryB returns results in order of query shrink depth",
-        withTests 1 $ queryBOrdering (shrinkListEverywhere emptyShrink) 3 ["hello", "hey"] "hej")
+        withTests 1 $ queryBOrdering (shrinkOrDeleteAll emptyShrink) 3 ["hello", "hey"] "hej")
     ]
   return ()
 
