@@ -177,15 +177,15 @@ allShrinksTo ray depth a = a : concatMap (allShrinksTo ray (depth - 1)) (shrink 
 
 data ShrinkAt a = ShrinkAt
   { shrinkDepth :: !Int
-  , shrunk :: !a
   , shrunkHash :: !Int
-  }
+  , shrunk :: !a
+  } deriving (Eq, Show)
 
 uniqueShrinksBreadth :: (Ord a) => (a -> Int) -> Shrink a -> Int -> a -> [ShrinkAt a]
 uniqueShrinksBreadth hash ray depth a =
   -- we could start with `HashSet.singleton (hashed a)`, but we're guaranteed
   -- not to ever find `a` as a result of shrinking `a`
-  evalState (traverseQueue' gen [ShrinkAt 0 a (hash a)]) HashSet.empty
+  evalState (traverseQueue' gen [ShrinkAt 0 (hash a) a]) HashSet.empty
   where
   gen sh = do
     seen <- get
@@ -195,7 +195,7 @@ uniqueShrinksBreadth hash ray depth a =
       let shrinks = fiatHashedWith hash <$> shrink ray (shrunk sh)
       let filteredShrinks = nubOrd $ filter (not . flip HashSet.member seen) shrinks
       modify' (HashSet.union (HashSet.fromList filteredShrinks))
-      pure $ (\(FiatHashed h a) -> ShrinkAt (shrinkDepth sh + 1) a h) <$> filteredShrinks
+      pure $ (\(FiatHashed h a) -> ShrinkAt (shrinkDepth sh + 1) h a) <$> filteredShrinks
 
 uniqueShrinksDepth :: (Eq a) => (a -> Int) -> Shrink a -> Int -> a -> [ShrinkAt a]
 uniqueShrinksDepth hash ray depth x = evalState (go 0 (FiatHashed (hash x) x)) HashSet.empty
@@ -204,11 +204,11 @@ uniqueShrinksDepth hash ray depth x = evalState (go 0 (FiatHashed (hash x) x)) H
     seen <- get
     let announceNewShrink = modify (HashSet.insert fh)
     if HashSet.member fh seen then pure []
-    else if n == depth then announceNewShrink *> pure [ShrinkAt n a h]
+    else if n == depth then announceNewShrink *> pure [ShrinkAt n h a]
     else do
       let shrinks = fiatHashedWith hash <$> shrink ray a
       announceNewShrink
-      (ShrinkAt n a h:) . concat <$> traverse (go (n+1)) shrinks
+      (ShrinkAt n h a:) . concat <$> traverse (go (n+1)) shrinks
 
 queryDict dict s =
   fromMaybe UV.empty (IntMap.lookup (shrunkHash s) (shrinkDict dict))

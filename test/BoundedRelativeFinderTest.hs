@@ -43,12 +43,12 @@ shrinkTriangular g ray = withTests 500 $ withDiscards 2000 $ property $ do
     [not (null (shrink ray e1 `intersect` shrink ray e2)) | e1 <- elems, e2 <- elems, e1 /= e2]
 
 queryBOrdering ray d dict q = property $ do
-  let xs = [(h, d) | (ShrinkAt d a h, _) <- queryB hash ray d (buildShrinkDict hash ray d dict) q]
+  let xs = [(h, d) | (ShrinkAt d h a, _) <- queryB hash ray d (buildShrinkDict hash ray d dict) q]
   assert (xs == sortOn snd xs)
   assert (length xs > 1)
 
-validate ray depth (ShrinkAt qd _ h) result =
-  case find (\(ShrinkAt _ _ dh) -> dh == h) (uniqueShrinksBreadth hash ray depth result) of
+validate ray depth (ShrinkAt qd h _) result =
+  case find (\(ShrinkAt _ dh _) -> dh == h) (uniqueShrinksBreadth hash ray depth result) of
     Just (ShrinkAt dd _ _) -> Just (qd, dd)
     _ -> Nothing
 
